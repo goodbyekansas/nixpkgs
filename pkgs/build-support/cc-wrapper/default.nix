@@ -550,6 +550,13 @@ stdenvNoCC.mkDerivation {
       wrap ${targetPrefix}cpp $wrapper $ccPath/cpp
     fi
   ''
+  + optionalString targetPlatform.isMsvc ''
+    if [ -e $ccPath/clang-cl ]; then
+      wrap ${targetPrefix}clang-cl ${./clangcl-wrapper.sh} $ccPath/clang-cl
+      export named_cc=${targetPrefix}clang-cl
+      export named_cxx=${targetPrefix}clang-cl
+    fi
+  ''
 
   # No need to wrap gnat, gnatkr, gnatname or gnatprep; we can just symlink them in
   + optionalString cc.langAda or false ''
@@ -591,6 +598,7 @@ stdenvNoCC.mkDerivation {
   ]
   ++ optional (cc.langC or true) ./setup-hook.sh
   ++ optional (cc.langFortran or false) ./fortran-hook.sh
+  ++ optional targetPlatform.isMsvc ./setup-hook-msvc.sh
   ++ optional (targetPlatform.isWindows || targetPlatform.isCygwin) (
     stdenvNoCC.mkDerivation {
       name = "win-dll-hook.sh";
@@ -641,6 +649,11 @@ stdenvNoCC.mkDerivation {
     + optionalString (useGccForLibs && !isArocc) ''
       echo "-L${gccForLibs}/lib/gcc/${targetPlatform.config}/${gccForLibs.version}" >> $out/nix-support/cc-ldflags
       echo "-L${gccForLibs_solib}/lib" >> $out/nix-support/cc-ldflags
+    ''
+
+    + optionalString targetPlatform.isMsvc ''
+      echo "-fuse-ld=lld" >>$out/nix-support/cc-cflags
+      echo "-fuse-ld=lld" >>$out/nix-support/cc-cflags-msvc
     ''
 
     # TODO We would like to connect this to `useGccForLibs`, but we cannot yet
@@ -732,6 +745,18 @@ stdenvNoCC.mkDerivation {
       + optionalString includeFortifyHeaders' ''
         include -isystem "${fortify-headers}/include" >> $out/nix-support/libc-cflags
       ''
+
+      + optionalString targetPlatform.isMsvc ''
+        include '-idirafter${libc}/crt/include' >>$out/nix-support/libc-cflags
+        include '-idirafter${libc}/sdk/include/um' >>$out/nix-support/libc-cflags
+        include '-idirafter${libc}/sdk/include/ucrt'  >>$out/nix-support/libc-cflags
+        include '-idirafter${libc}/sdk/include/shared'  >>$out/nix-support/libc-cflags
+
+        echo '-clang:-idirafter${libc}/crt/include' >>$out/nix-support/libc-cflags-msvc
+        echo '-clang:-idirafter${libc}/sdk/include/um' >>$out/nix-support/libc-cflags-msvc
+        echo '-clang:-idirafter${libc}/sdk/include/ucrt' >>$out/nix-support/libc-cflags-msvc
+        echo '-clang:-idirafter${libc}/sdk/include/shared' >>$out/nix-support/libc-cflags-msvc
+      ''
     )
 
     ##
@@ -742,7 +767,12 @@ stdenvNoCC.mkDerivation {
     # bundled with the C compiler because it is GCC
     +
       optionalString
-        (libcxx != null || (useGccForLibs && gccForLibs.langCC or false) || (isGNU && cc.langCC or false))
+        (
+          libcxx != null
+          || (useGccForLibs && gccForLibs.langCC or false)
+          || (isGNU && cc.langCC or false)
+          || targetPlatform.isMsvc
+        )
         ''
           touch "$out/nix-support/libcxx-cxxflags"
           touch "$out/nix-support/libcxx-ldflags"

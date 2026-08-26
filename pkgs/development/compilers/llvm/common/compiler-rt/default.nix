@@ -85,7 +85,19 @@ stdenv.mkDerivation (finalAttrs: {
     url = "https://github.com/llvm/llvm-project/pull/99837/commits/14ae0a660a38e1feb151928a14f35ff0f4487351.patch";
     hash = "sha256-JykABCaNNhYhZQxCvKiBn54DZ5ZguksgCHnpdwWF2no=";
     relative = "compiler-rt";
-  });
+  })
+  ++ lib.optionals (stdenv.hostPlatform.isMsvc && lib.versionOlder release_version "23.1.0") [
+    (fetchpatch {
+      url = "https://github.com/llvm/llvm-project/commit/77b7183542f7f6b3b47a271324c2ac93feb8f811.patch";
+      hash = "sha256-AEVaejvvgmay6zAqCSPZ6w4LGtySUCzKRqEErm88pIM=";
+      relative = "compiler-rt";
+    })
+    (fetchpatch {
+      url = "https://github.com/llvm/llvm-project/commit/57f1ec6e0a4ec3cd4a485ca1ec85e3efe541933b.patch";
+      hash = "sha256-IEmyjBWKr8TMaY6w+vVvsce13EX5VPfi0XQOHJhwKx4=";
+      relative = "compiler-rt";
+    })
+  ];
 
   nativeBuildInputs = [
     cmake
@@ -112,9 +124,23 @@ stdenv.mkDerivation (finalAttrs: {
         "-Wno-error=implicit-function-declaration"
       ]
     );
-
     # Work around clang’s trying to invoke unprefixed-ld on Darwin when `-target` is passed.
     NIX_CFLAGS_LINK = lib.optionalString (stdenv.hostPlatform.isDarwin) "--ld-path=${stdenv.cc.bintools}/bin/${stdenv.cc.targetPrefix}ld";
+  }
+  // lib.optionalAttrs stdenv.hostPlatform.isMsvc {
+    NIX_CFLAGS_MSVC_COMPILE = toString (
+      [
+        "-DSCUDO_DEFAULT_OPTIONS=delete_size_mismatch=false:dealloc_type_mismatch=false"
+      ]
+      ++ lib.optionals (!haveLibc) [
+        # The compiler got stricter about this, and there is a usellvm patch below
+        # which patches out the assert include causing an implicit definition of
+        # assert. It would be nicer to understand why compiler-rt thinks it should
+        # be able to #include <assert.h> in the first place; perhaps it's in the
+        # wrong, or perhaps there is a way to provide an assert.h.
+        "-Wno-error=implicit-function-declaration"
+      ]
+    );
   };
 
   cmakeFlags = [
@@ -218,6 +244,10 @@ stdenv.mkDerivation (finalAttrs: {
             --replace-fail "#include <assert.h>" ""
         ''
       )
+      + (lib.optionalString (stdenv.hostPlatform.isMsvc) ''
+        substituteInPlace lib/builtins/cpu_model/x86.c \
+          --replace-fail "#include <intrin.h>" ""
+      '')
     )
     +
       lib.optionalString (lib.versionAtLeast release_version "19")
