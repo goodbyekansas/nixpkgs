@@ -270,6 +270,19 @@ stdenvNoCC.mkDerivation {
       basename=$(basename "$variant")
       wrap $basename ${./ld-wrapper.sh} $variant
     done
+  ''
+  + optionalString (targetPlatform.isMsvc) ''
+    if [ -e $ldPath/${targetPrefix}lld-link ]; then
+      wrap ${targetPrefix}lld-link ${./link-wrapper.sh} $ldPath/${targetPrefix}lld-link
+    fi
+
+    if [ -e $ldPath/${targetPrefix}rc ]; then
+      ln -s $ldPath/${targetPrefix}rc $out/bin/${targetPrefix}rc
+    fi
+
+    if [ -e $ldPath/${targetPrefix}lib ]; then
+      ln -s $ldPath/${targetPrefix}lib $out/bin/${targetPrefix}lib
+    fi
   '';
 
   strictDeps = true;
@@ -278,7 +291,8 @@ stdenvNoCC.mkDerivation {
   setupHooks = [
     ../setup-hooks/role.bash
     ./setup-hook.sh
-  ];
+  ]
+  ++ lib.optional targetPlatform.isMsvc ./setup-hook-msvc.sh;
 
   postFixup =
     ##
@@ -333,6 +347,15 @@ stdenvNoCC.mkDerivation {
       ''
       + optionalString (libc.w32api or null != null) ''
         echo '-L${lib.getLib libc.w32api}${libc.libdir or "/lib/w32api"}' >> $out/nix-support/libc-ldflags
+      ''
+      + optionalString targetPlatform.isMsvc ''
+        echo '-L${libc}/crt/lib/x64' >>$out/nix-support/libc-ldflags
+        echo '-L${libc}/sdk/lib/um/x64' >>$out/nix-support/libc-ldflags
+        echo '-L${libc}/sdk/lib/ucrt/x64' >>$out/nix-support/libc-ldflags
+
+        echo '-libpath:${libc}/crt/lib/x64' >>$out/nix-support/libc-ldflags-msvc
+        echo '-libpath:${libc}/sdk/lib/um/x64' >>$out/nix-support/libc-ldflags-msvc
+        echo '-libpath:${libc}/sdk/lib/ucrt/x64' >>$out/nix-support/libc-ldflags-msvc
       ''
     )
 
@@ -437,6 +460,19 @@ stdenvNoCC.mkDerivation {
       wrap \
         ${targetPrefix}ranlib ${./llvm-ranlib-wrapper.sh} \
         "${bintools_bin}/bin/${targetPrefix}ranlib"
+    ''
+
+    ## MSVC stuff
+    + optionalString targetPlatform.isMsvc ''
+      rm $out/bin/${targetPrefix}windres
+      wrap ${targetPrefix}windres \
+        ${./windres-wrapper.sh} \
+        "${bintools_bin}/bin/${targetPrefix}windres"
+
+      rm $out/bin/${targetPrefix}rc
+      wrap ${targetPrefix}rc \
+        ${./llvm-rc-wrapper.sh} \
+        "${bintools_bin}/bin/${targetPrefix}rc"
     ''
 
     ##

@@ -131,6 +131,9 @@ makeScopeWithSplicing' {
           mkdir "$rsrc"
           echo "-resource-dir=$rsrc" >> $out/nix-support/cc-cflags
         ''
+        + lib.optionalString stdenv.targetPlatform.isMsvc ''
+          echo "-resource-dir=$rsrc" >> $out/nix-support/cc-cflags-before-msvc
+        ''
         # clang standard c headers are incompatible with FreeBSD so we have to put them in -idirafter instead of -resource-dir
         # see https://github.com/freebsd/freebsd-src/commit/f382bac49b1378da3c2dd66bf721beaa16b5d471
         + (
@@ -212,6 +215,11 @@ makeScopeWithSplicing' {
           self.clangNoLibc
         else if stdenv.targetPlatform.isDarwin then
           self.systemLibcxxClang
+        else if stdenv.targetPlatform.isMsvc then
+          # this is not really libstdcxx, just
+          # clang with compiler-rt+libc but with
+          # MSVC libstdc++.
+          self.libstdcxxClang
         else if stdenv.targetPlatform.useLLVM or false then
           self.clangUseLLVM
         else if (targetPackages.stdenv or stdenv).cc.isGNU then
@@ -365,7 +373,8 @@ makeScopeWithSplicing' {
           "-B${targetLlvmPackages.compiler-rt-no-libc}/lib"
           "-nostdlib++"
         ]
-        ++ lib.optional stdenv.targetPlatform.isWasm "-fno-exceptions";
+        ++ lib.optional stdenv.targetPlatform.isWasm "-fno-exceptions"
+        ++ lib.optional stdenv.targetPlatform.isMsvc "-Wno-unused-command-line-argument";
       };
 
       clangNoLibcWithBasicRt = wrapCCWith rec {
@@ -414,6 +423,8 @@ makeScopeWithSplicing' {
             # Darwin needs to use a bootstrap stdenv to avoid an infinite recursion when cross-compiling.
             if args.stdenv.hostPlatform.isDarwin then
               overrideCC darwin.bootstrapStdenv buildLlvmPackages.clangWithLibcAndBasicRtAndLibcxx
+            else if args.stdenv.hostPlatform.isMsvc or false then
+              overrideCC args.stdenv buildLlvmPackages.clangWithLibcAndBasicRt
             else if args.stdenv.hostPlatform.useLLVM or false then
               overrideCC args.stdenv buildLlvmPackages.clangWithLibcAndBasicRtAndLibcxx
             else

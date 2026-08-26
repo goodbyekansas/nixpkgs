@@ -35,6 +35,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     "--arch=${finalAttrs.src.arch}"
     "splat"
     "--preserve-ms-arch-notation"
+    "--include-debug-libs"
   ];
 
   installPhase = ''
