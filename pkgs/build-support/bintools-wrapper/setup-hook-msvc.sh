@@ -37,6 +37,7 @@ done
 # TODO: Make it possible to control if we
 # are using MSVC-compatible tools or not
 export AR${role_post}=$LIB${role_post}
+export LD${role_post}=@targetPrefix@lld-link${role_post}
 
 # No local scope in sourced file
 unset -v role_post cmd upper_case
