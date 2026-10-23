@@ -28,18 +28,23 @@ nonFlagArgs=0
 extraAfter=()
 extraBefore=()
 
+parseExtraLinkerArgs=false
+extraLinkerArgs=()
+
 expandResponseParams "$@"
 declare -ag positionalArgs=()
 declare -i n=0
 nParams=${#params[@]}
+args=()
 while (( "$n" < "$nParams" )); do
     p=${params[n]}
-    p2=${params[n+1]:-} # handle `p` being last one
     n+=1
   case "$p" in
-    /c|-c) link=false;;
-    -nostdlib)
+    /c|-c)
+      args+=("$p")
+      link=false
       ;;
+    /link) parseExtraLinkerArgs=true;;
     --) # Everything else is positional args!
         # See: https://github.com/llvm/llvm-project/commit/ed1d07282cc9d8e4c25d585e03e5c8a1b6f63a74
 
@@ -48,9 +53,15 @@ while (( "$n" < "$nParams" )); do
         if [[ -v "params[$n]" ]]; then nonFlagArgs=1; fi
 
         positionalArgs=("${params[@]:$n}")
-        params=("${params[@]:0:$((n - 1))}")
         break;
         ;;
+    *)
+      if [ $parseExtraLinkerArgs = true ]; then
+        extraLinkerArgs+=("$p")
+      else
+        args+=("$p")
+      fi
+      ;;
   esac
 done
 
@@ -78,6 +89,10 @@ if [ $link = true ]; then
   for op in $NIX_LDFLAGS_MSVC_@suffixSalt@; do
     extraAfter+=("-Xlinker" "$op")
   done
+
+  for ex in "${extraLinkerArgs[@]}"; do
+    extraAfter+=("-Xlinker" "$ex")
+  done
 fi
 
 # Finally, if we got any positional args, append them to `extraAfter`
@@ -104,12 +119,12 @@ if (( "${NIX_DEBUG:-0}" >= 1 )); then
     echo "extra flags before to @prog@:" >&2
     printf "  %q\n" ${extraBefore+"${extraBefore[@]}"}  >&2
     echo "original flags to @prog@:" >&2
-    printf "  %q\n" ${params+"${params[@]}"} >&2
+    printf "  %q\n" ${args+"${args[@]}"} >&2
     echo "extra flags after to @prog@:" >&2
     printf "  %q\n" ${extraAfter+"${extraAfter[@]}"} >&2
 fi
 
 exec @prog@ \
    ${extraBefore+"${extraBefore[@]}"} \
-   ${params+"${params[@]}"} \
+   ${args+"${args[@]}"} \
    ${extraAfter+"${extraAfter[@]}"}
