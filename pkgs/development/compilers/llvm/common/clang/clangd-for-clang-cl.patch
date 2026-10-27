@@ -1,0 +1,20 @@
+diff --git a/clang-tools-extra/clangd/SystemIncludeExtractor.cpp b/clang-tools-extra/clangd/SystemIncludeExtractor.cpp
+index 0b067e8b0b2b..d9eb5774fb40 100644
+--- a/clang-tools-extra/clangd/SystemIncludeExtractor.cpp
++++ b/clang-tools-extra/clangd/SystemIncludeExtractor.cpp
+@@ -439,9 +439,12 @@ addSystemIncludes(tooling::CompileCommand &Cmd,
+                   llvm::ArrayRef<std::string> SystemIncludes) {
+   std::vector<std::string> ToAppend;
+   for (llvm::StringRef Include : SystemIncludes) {
+-    // FIXME(kadircet): This doesn't work when we have "--driver-mode=cl"
+-    ToAppend.push_back("-isystem");
+-    ToAppend.push_back(Include.str());
++    if (llvm::is_contained(Cmd.CommandLine, "--driver-mode=cl")) {
++      ToAppend.push_back("/external:I" + Include.str());
++    } else {
++      ToAppend.push_back("-isystem");
++      ToAppend.push_back(Include.str());
++    }
+   }
+   if (!ToAppend.empty()) {
+     // Just append when `--` isn't present.

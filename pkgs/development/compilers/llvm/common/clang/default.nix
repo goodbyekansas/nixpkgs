@@ -127,6 +127,8 @@ stdenv.mkDerivation (
     ''
     + lib.optionalString stdenv.hostPlatform.isMusl ''
       sed -i -e 's/lgcc_s/lgcc_eh/' lib/Driver/ToolChains/*.cpp
+    '' + lib.optionalString stdenv.targetPlatform.isMsvc ''
+      (cd .. && chmod -R u+w clang-tools-extra && patch -p1 <"${./clangd-for-clang-cl.patch}")
     '';
 
     outputs = [
